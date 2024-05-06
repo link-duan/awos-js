@@ -199,7 +199,7 @@ export abstract class AbstractClient {
     }
     const keySuffix = key.slice(-1).toLowerCase();
     const shardIndex = this.shards.findIndex((s) => s.indexOf(keySuffix) > -1);
-    if (!shardIndex) {
+    if (shardIndex < 0) {
       throw Error('key not exist in shards bucket!');
     }
     const bucket = this.buckets[shardIndex];
