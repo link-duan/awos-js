@@ -16,6 +16,7 @@ import * as _ from 'lodash';
 
 const assert = require('assert');
 const retry = require('async-retry');
+const debug = require('debug')('awos:aws');
 
 const STANDARD_HEADERS_KEYMAP = {
   ContentType: 'content-type',
@@ -40,15 +41,52 @@ export interface IAWSOptions {
 
 const DefaultSignatureVersion = 'v4';
 
+function stringifyLogs(...msg: any[]): string {
+  let res = '';
+  for (const part of msg) {
+    switch (typeof part) {
+      case 'string':
+      case 'number':
+      case 'bigint':
+      case 'boolean':
+        res += part;
+        break;
+      case 'symbol':
+        res += '[Symbol]';
+        break;
+      case 'undefined':
+        res += 'undefined';
+        break;
+      case 'object':
+        res += JSON.stringify(part);
+        break;
+      case 'function':
+        res += '[Function]';
+        break;
+    }
+    res += ' '; // add space between parts
+  }
+  return res.slice(0, -1); // remove last space
+}
+
 export default class AWSClient implements IAWOS {
   private client: AWS.S3;
   private shardsBucket: Map<string, string> = new Map();
   private bucket: string;
 
   constructor(options: IAWSOptions) {
-    const s3ForcePathStyle = !!options.s3ForcePathStyle;
+    if (options.log) {
+      AWS.config.logger = { log: options.log };
+    } else {
+      AWS.config.logger = {
+        log(...msg: any[]) {
+          debug(stringifyLogs(...msg));
+        },
+      };
+    }
 
-    ['accessKeyId', 'secretAccessKey', 'bucket'].forEach(key => {
+    const s3ForcePathStyle = !!options.s3ForcePathStyle;
+    ['accessKeyId', 'secretAccessKey', 'bucket'].forEach((key) => {
       assert(options[key], `options.${key} required`);
     });
 
@@ -65,7 +103,6 @@ export default class AWSClient implements IAWOS {
         region: options.region || 'cn-north-1',
         signatureVersion: options.signatureVersion || DefaultSignatureVersion,
         s3ForcePathStyle,
-        logger: { log: options.log },
       });
     }
     // use aws s3
@@ -79,7 +116,6 @@ export default class AWSClient implements IAWOS {
         secretAccessKey: options.secretAccessKey,
         region: options.region,
         signatureVersion: options.signatureVersion || DefaultSignatureVersion,
-        logger: { log: options.log },
       };
       if (options.endpoint) {
         s3Options.endpoint = options.endpoint;
@@ -165,7 +201,7 @@ export default class AWSClient implements IAWOS {
     await retry(
       async () => {
         await new Promise<void>((resolve, reject) => {
-          this.client.putObject(params, err => {
+          this.client.putObject(params, (err) => {
             if (err) {
               return reject(err);
             }
@@ -221,7 +257,7 @@ export default class AWSClient implements IAWOS {
     await retry(
       async () => {
         await new Promise<void>((resolve, reject) => {
-          this.client.copyObject(params, err => {
+          this.client.copyObject(params, (err) => {
             if (err) {
               return reject(err);
             }
@@ -244,7 +280,7 @@ export default class AWSClient implements IAWOS {
     };
 
     await new Promise<void>((resolve, reject) => {
-      this.client.deleteObject(params, err => {
+      this.client.deleteObject(params, (err) => {
         if (err) {
           return reject(err);
         }
@@ -258,7 +294,7 @@ export default class AWSClient implements IAWOS {
     const params = {
       Bucket: bucket,
       Delete: {
-        Objects: keys.map(key => ({ Key: key })),
+        Objects: keys.map((key) => ({ Key: key })),
         Quiet: true,
       },
     };
@@ -268,7 +304,9 @@ export default class AWSClient implements IAWOS {
           reject(err);
         } else {
           resolve(
-            res.Errors ? res.Errors.map(e => e.Key!).filter(k => k != null) : []
+            res.Errors
+              ? res.Errors.map((e) => e.Key!).filter((k) => k != null)
+              : []
           );
         }
       });
@@ -348,7 +386,7 @@ export default class AWSClient implements IAWOS {
       });
     });
 
-    return result.map(o => o.Key);
+    return result.map((o) => o.Key);
   }
 
   public async listObjectV2(
@@ -381,7 +419,7 @@ export default class AWSClient implements IAWOS {
       });
     });
 
-    return result.map(o => o.Key);
+    return result.map((o) => o.Key);
   }
 
   public async listDetails(
@@ -416,7 +454,7 @@ export default class AWSClient implements IAWOS {
         const result = {
           isTruncated: data.IsTruncated || false,
           objects: data.Contents
-            ? data.Contents.map(o => ({
+            ? data.Contents.map((o) => ({
                 key: o.Key,
                 etag: o.ETag,
                 lastModified: o.LastModified,
@@ -424,7 +462,7 @@ export default class AWSClient implements IAWOS {
               }))
             : [],
           prefixes: data.CommonPrefixes
-            ? data.CommonPrefixes.map(p => p.Prefix!).filter(p => p != null)
+            ? data.CommonPrefixes.map((p) => p.Prefix!).filter((p) => p != null)
             : [],
           nextMarker: data.NextMarker,
         };
@@ -467,7 +505,7 @@ export default class AWSClient implements IAWOS {
         const result = {
           isTruncated: data.IsTruncated || false,
           objects: data.Contents
-            ? data.Contents.map(o => ({
+            ? data.Contents.map((o) => ({
                 key: o.Key,
                 etag: o.ETag,
                 lastModified: o.LastModified,
@@ -475,7 +513,7 @@ export default class AWSClient implements IAWOS {
               }))
             : [],
           prefix: data.CommonPrefixes
-            ? data.CommonPrefixes.map(p => p.Prefix!).filter(p => p != null)
+            ? data.CommonPrefixes.map((p) => p.Prefix!).filter((p) => p != null)
             : [],
           nextContinuationToken: data.NextContinuationToken,
         };
