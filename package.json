@@ -10,8 +10,7 @@
   "scripts": {
     "clean": "rimraf lib",
     "format": "prettier --write \"{src,__tests__}/**/*.ts\"",
-    "lint": "tslint --force --format verbose \"src/**/*.ts\"",
-    "prebuild": "npm run clean && npm run format && npm run lint && echo Using TypeScript && tsc --version",
+    "prebuild": "npm run clean && npm run format && echo Using TypeScript && tsc --version",
     "prepublish": "npm run build",
     "build": "tsc",
     "test": "jest"
