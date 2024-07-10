@@ -20,6 +20,7 @@ const assert = require('assert');
 
 export interface IOptions {
   type: string;
+  log?: (...messages: any[]) => void;
   ossOptions?: IOSSOptions;
   awsOptions?: IAWSOptions;
 }
@@ -31,9 +32,9 @@ export default class AWOS implements IAWOS {
     assert(options.type, 'options.type is required!');
 
     if (options.type === 'oss' && options.ossOptions) {
-      this.client = new OSS(options.ossOptions);
+      this.client = new OSS({ ...options.ossOptions, log: options.log });
     } else if (options.type === 'aws' && options.awsOptions) {
-      this.client = new AWS(options.awsOptions);
+      this.client = new AWS({ ...options.awsOptions, log: options.log });
     } else {
       throw Error('invalid options!');
     }

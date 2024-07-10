@@ -209,7 +209,7 @@ it('should listDetails() works fine', async () => {
 it('should listDetailsV2() works fine', async () => {
   const keys = this.keys;
   await Promise.all(
-    keys.map((key) =>
+    keys.map(key =>
       this.aws.put(key, this.content, {
         contentType: this.contentType,
       })

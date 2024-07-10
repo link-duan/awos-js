@@ -34,6 +34,7 @@ export interface IAWSOptions {
   s3ForcePathStyle?: boolean;
   region?: string;
   signatureVersion?: string;
+  log?: (...messages: any[]) => void;
   [key: string]: any;
 }
 
@@ -64,6 +65,7 @@ export default class AWSClient implements IAWOS {
         region: options.region || 'cn-north-1',
         signatureVersion: options.signatureVersion || DefaultSignatureVersion,
         s3ForcePathStyle,
+        logger: { log: options.log },
       });
     }
     // use aws s3
@@ -77,6 +79,7 @@ export default class AWSClient implements IAWOS {
         secretAccessKey: options.secretAccessKey,
         region: options.region,
         signatureVersion: options.signatureVersion || DefaultSignatureVersion,
+        logger: { log: options.log },
       };
       if (options.endpoint) {
         s3Options.endpoint = options.endpoint;
