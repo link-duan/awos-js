@@ -1,19 +1,37 @@
-import AWS = require('aws-sdk');
 import {
-  IGetObjectResponse,
-  IListObjectOptions,
-  IListObjectV2Options,
-  ISignatureUrlOptions,
-  IGetBufferedObjectResponse,
-  IPutObjectOptions,
-  IListObjectOutput,
-  IListObjectV2Output,
-  ICopyObjectOptions,
-  IHeadOptions,
-  ICommonClientOptions,
-} from './types';
+  CopyObjectCommand,
+  CopyObjectCommandInput,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  GetObjectCommandInput,
+  HeadObjectCommand,
+  ListObjectsCommand,
+  ListObjectsCommandInput,
+  ListObjectsV2Command,
+  ListObjectsV2CommandInput,
+  NoSuchKey,
+  PutObjectCommand,
+  PutObjectCommandInput,
+  S3Client,
+  S3ClientConfig
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as _ from 'lodash';
 import { AbstractClient } from './client';
+import {
+  ICommonClientOptions,
+  ICopyObjectOptions,
+  IGetBufferedObjectResponse,
+  IGetObjectResponse,
+  IHeadOptions,
+  IListObjectOptions,
+  IListObjectOutput,
+  IListObjectV2Options,
+  IListObjectV2Output,
+  IPutObjectOptions,
+  ISignatureUrlOptions,
+} from './types';
 
 const assert = require('assert');
 const retry = require('async-retry');
@@ -32,18 +50,19 @@ export interface IAWSOptions extends ICommonClientOptions {
   signatureVersion?: string;
 }
 
-const DefaultSignatureVersion = 'v4';
-
 export default class AWSClient extends AbstractClient {
-  private client: AWS.S3;
+  private client: S3Client;
 
   constructor(options: IAWSOptions) {
     super(options);
 
-    const awsClientOptions: AWS.S3.Types.ClientConfiguration = {
-      accessKeyId: options.accessKeyID,
-      secretAccessKey: options.accessKeySecret,
-      signatureVersion: options.signatureVersion || DefaultSignatureVersion,
+    const awsClientOptions: S3ClientConfig = {
+      useAccelerateEndpoint: false,
+      disableMultiregionAccessPoints: true,
+      credentials: {
+        accessKeyId: options.accessKeyID,
+        secretAccessKey: options.accessKeySecret,
+      },
     };
     const s3ForcePathStyle = !!options.s3ForcePathStyle;
     if (s3ForcePathStyle) {
@@ -54,7 +73,7 @@ export default class AWSClient extends AbstractClient {
       );
       awsClientOptions.endpoint = options.endpoint;
       awsClientOptions.region = options.region || 'cn-north-1';
-      awsClientOptions.s3ForcePathStyle = true;
+      awsClientOptions.forcePathStyle = true;
     } else {
       // aws s3
       assert(
@@ -66,7 +85,7 @@ export default class AWSClient extends AbstractClient {
         awsClientOptions.endpoint = options.endpoint;
       }
     }
-    this.client = new AWS.S3(awsClientOptions);
+    this.client = new S3Client(awsClientOptions);
   }
 
   protected async _get(
@@ -114,7 +133,7 @@ export default class AWSClient extends AbstractClient {
       metaData[k] = String(v);
     }
 
-    const params: AWS.S3.Types.PutObjectRequest = {
+    const params: PutObjectCommandInput = {
       Body: data,
       Bucket: bucket,
       Key: key,
@@ -135,23 +154,11 @@ export default class AWSClient extends AbstractClient {
     } else if (_headers.contentEncoding) {
       params.ContentEncoding = _headers.contentEncoding;
     }
-
-    await retry(
-      async () => {
-        await new Promise<void>((resolve, reject) => {
-          this.client.putObject(params, (err) => {
-            if (err) {
-              return reject(err);
-            }
-            resolve();
-          });
-        });
-      },
-      {
-        retries: 3,
-        maxTimeout: 2000,
-      }
-    );
+    await this.client.send(new PutObjectCommand(params));
+    // await retry(() => this.client.send(new PutObjectCommand(params)), {
+    //   retries: 3,
+    //   maxTimeout: 2000,
+    // });
   }
 
   protected async _copy(
@@ -171,7 +178,7 @@ export default class AWSClient extends AbstractClient {
       metaData[k] = String(v);
     }
 
-    const params: AWS.S3.Types.CopyObjectRequest = {
+    const params: CopyObjectCommandInput = {
       CopySource: `${sourceBucket}/${source}`,
       Bucket: bucket,
       Key: key,
@@ -192,22 +199,10 @@ export default class AWSClient extends AbstractClient {
       params.ContentEncoding = _headers.contentEncoding;
     }
 
-    await retry(
-      async () => {
-        await new Promise<void>((resolve, reject) => {
-          this.client.copyObject(params, (err) => {
-            if (err) {
-              return reject(err);
-            }
-            resolve();
-          });
-        });
-      },
-      {
-        retries: 3,
-        maxTimeout: 2000,
-      }
-    );
+    await retry(async () => this.client.send(new CopyObjectCommand(params)), {
+      retries: 3,
+      maxTimeout: 2000,
+    });
   }
 
   protected async _del(key: string): Promise<void> {
@@ -216,17 +211,13 @@ export default class AWSClient extends AbstractClient {
       Bucket: bucket,
       Key: key,
     };
-
-    await new Promise<void>((resolve, reject) => {
-      this.client.deleteObject(params, (err) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve();
-      });
-    });
+    await this.client.send(new DeleteObjectCommand(params));
   }
 
+  /**
+   * @param keys to be deleted
+   * @returns deleted keys
+   */
   protected async _delMulti(keys: string[]): Promise<string[]> {
     const bucket = this.getBucketName(keys[0]);
     const params = {
@@ -236,19 +227,8 @@ export default class AWSClient extends AbstractClient {
         Quiet: true,
       },
     };
-    return new Promise<string[]>((resolve, reject) => {
-      this.client.deleteObjects(params, (err, res) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(
-            res.Errors
-              ? res.Errors.map((e) => e.Key!).filter((k) => k != null)
-              : []
-          );
-        }
-      });
-    });
+    const res = await this.client.send(new DeleteObjectsCommand(params));
+    return res.Deleted?.filter((e) => !!e.Key).map((e) => e.Key!) || [];
   }
 
   protected async _head(
@@ -260,38 +240,34 @@ export default class AWSClient extends AbstractClient {
       Bucket: bucket,
       Key: key,
     };
-
-    return new Promise((resolve, reject) => {
-      this.client.headObject(params, (err, data) => {
-        if (err) {
-          if (err.statusCode === 404) {
-            return resolve(null);
+    try {
+      const data = await this.client.send(new HeadObjectCommand(params));
+      const meta = new Map<string, string>();
+      if (data.Metadata) {
+        const metaData = data.Metadata;
+        Object.keys(data.Metadata).forEach((k: string) => {
+          meta.set(k, metaData[k]);
+        });
+      }
+      if (options && options.withStandardHeaders) {
+        for (const k of Object.keys(STANDARD_HEADERS_KEYMAP)) {
+          if (STANDARD_HEADERS_KEYMAP[k] === 'last-modified') {
+            meta.set(
+              STANDARD_HEADERS_KEYMAP[k],
+              String(new Date(data[k]).getTime())
+            );
+            continue;
           }
-          return reject(err);
+          meta.set(STANDARD_HEADERS_KEYMAP[k], String(data[k]));
         }
-
-        const meta = new Map<string, string>();
-        if (data.Metadata) {
-          const metaData = data.Metadata;
-          Object.keys(data.Metadata).forEach((k: string) => {
-            meta.set(k, metaData[k]);
-          });
-        }
-        if (options && options.withStandardHeaders) {
-          for (const k of Object.keys(STANDARD_HEADERS_KEYMAP)) {
-            if (STANDARD_HEADERS_KEYMAP[k] === 'last-modified') {
-              meta.set(
-                STANDARD_HEADERS_KEYMAP[k],
-                String(new Date(data[k]).getTime())
-              );
-              continue;
-            }
-            meta.set(STANDARD_HEADERS_KEYMAP[k], String(data[k]));
-          }
-        }
-        resolve(meta);
-      });
-    });
+      }
+      return meta;
+    } catch (e) {
+      if (e instanceof NoSuchKey) {
+        return null;
+      }
+      throw e;
+    }
   }
 
   protected async _listObject(
@@ -315,16 +291,9 @@ export default class AWSClient extends AbstractClient {
       }
     }
 
-    const result: any[] = await new Promise<any>((resolve, reject) => {
-      this.client.listObjects(paramsList, (err, data) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(data.Contents);
-      });
-    });
-
-    return result.map((o) => o.Key);
+    return this.client
+      .send(new ListObjectsCommand(paramsList))
+      .then((r) => r.Contents?.map((v) => v.Key!) || []);
   }
 
   protected async _listObjectV2(
@@ -332,7 +301,7 @@ export default class AWSClient extends AbstractClient {
     options?: IListObjectV2Options
   ): Promise<string[]> {
     const bucket = this.getBucketName(key);
-    const paramsList: any = {
+    const paramsList: ListObjectsV2CommandInput = {
       Bucket: bucket,
     };
 
@@ -348,16 +317,9 @@ export default class AWSClient extends AbstractClient {
       }
     }
 
-    const result: any[] = await new Promise<any>((resolve, reject) => {
-      this.client.listObjects(paramsList, (err, data) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(data.Contents);
-      });
-    });
-
-    return result.map((o) => o.Key);
+    return this.client
+      .send(new ListObjectsV2Command(paramsList))
+      .then((r) => r.Contents?.map((v) => v.Key!) || []);
   }
 
   protected async _listDetails(
@@ -365,7 +327,7 @@ export default class AWSClient extends AbstractClient {
     options?: IListObjectOptions
   ): Promise<IListObjectOutput> {
     const bucket = this.getBucketName(key);
-    const paramsList: AWS.S3.Types.ListObjectsRequest = {
+    const paramsList: ListObjectsCommandInput = {
       Bucket: bucket,
     };
 
@@ -383,32 +345,23 @@ export default class AWSClient extends AbstractClient {
         paramsList.MaxKeys = options.maxKeys;
       }
     }
-
-    const result = await new Promise<IListObjectOutput>((resolve, reject) => {
-      this.client.listObjects(paramsList, (err, data) => {
-        if (err) {
-          return reject(err);
-        }
-        const result = {
-          isTruncated: data.IsTruncated || false,
-          objects: data.Contents
-            ? data.Contents.map((o) => ({
-                key: o.Key,
-                etag: o.ETag,
-                lastModified: o.LastModified,
-                size: o.Size,
-              }))
-            : [],
-          prefixes: data.CommonPrefixes
-            ? data.CommonPrefixes.map((p) => p.Prefix!).filter((p) => p != null)
-            : [],
-          nextMarker: data.NextMarker,
-        };
-        return resolve(result);
-      });
+    return this.client.send(new ListObjectsCommand(paramsList)).then((data) => {
+      return {
+        isTruncated: data.IsTruncated || false,
+        objects: data.Contents
+          ? data.Contents.map((o) => ({
+              key: o.Key,
+              etag: o.ETag,
+              lastModified: o.LastModified,
+              size: o.Size,
+            }))
+          : [],
+        prefixes: data.CommonPrefixes
+          ? data.CommonPrefixes.map((p) => p.Prefix!).filter((p) => p != null)
+          : [],
+        nextMarker: data.NextMarker,
+      };
     });
-
-    return result;
   }
 
   protected async _listDetailsV2(
@@ -416,7 +369,7 @@ export default class AWSClient extends AbstractClient {
     options?: IListObjectV2Options
   ): Promise<IListObjectV2Output> {
     const bucket = this.getBucketName(key);
-    const paramsList: AWS.S3.Types.ListObjectsV2Request = {
+    const paramsList: ListObjectsV2CommandInput = {
       Bucket: bucket,
     };
 
@@ -435,12 +388,10 @@ export default class AWSClient extends AbstractClient {
       }
     }
 
-    const result = await new Promise<IListObjectV2Output>((resolve, reject) => {
-      this.client.listObjectsV2(paramsList, (err, data) => {
-        if (err) {
-          return reject(err);
-        }
-        const result = {
+    return this.client
+      .send(new ListObjectsV2Command(paramsList))
+      .then((data) => {
+        return {
           isTruncated: data.IsTruncated || false,
           objects: data.Contents
             ? data.Contents.map((o) => ({
@@ -455,11 +406,7 @@ export default class AWSClient extends AbstractClient {
             : [],
           nextContinuationToken: data.NextContinuationToken,
         };
-        return resolve(result);
       });
-    });
-
-    return result;
   }
 
   protected async _signatureUrl(
@@ -471,26 +418,19 @@ export default class AWSClient extends AbstractClient {
       Bucket: bucket,
       Key: key,
     };
-    let operation = 'getObject';
 
+    let expiresIn = 600;
+    let cmd = new GetObjectCommand(params);
     if (_options) {
-      if (_options.method === 'PUT') {
-        operation = 'putObject';
-      }
       if (_options.expires) {
-        params.Expires = _options.expires;
+        expiresIn = _options.expires;
+      }
+      if (_options.method === 'PUT') {
+        cmd = new PutObjectCommand(params);
       }
     }
 
-    const res: string = await new Promise((resolve, reject) => {
-      this.client.getSignedUrl(operation, params, (err, data) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(data);
-      });
-    });
-    return res;
+    return await getSignedUrl(this.client, cmd, { expiresIn });
   }
 
   private async getWithMetadata(
@@ -502,12 +442,12 @@ export default class AWSClient extends AbstractClient {
     headers: any;
   } | null> {
     const bucket = this.getBucketName(key);
-    const params = {
+    const params: GetObjectCommandInput = {
       Bucket: bucket,
       Key: key,
     };
     try {
-      const data = await _getObject(this.client, params);
+      const data = await this.client.send(new GetObjectCommand(params));
       const awsResult = data;
       if (!awsResult) {
         return null;
@@ -525,7 +465,8 @@ export default class AWSClient extends AbstractClient {
         'content-length': awsResult.ContentLength,
       };
 
-      const body = awsResult.Body as Buffer;
+      const content = await awsResult.Body!.transformToByteArray();
+      const body: Buffer = Buffer.from(content);
       const result = {
         content: body,
         meta,
@@ -536,24 +477,10 @@ export default class AWSClient extends AbstractClient {
       }
       return result;
     } catch (err) {
-      if (err?.statusCode === 404) {
+      if (err instanceof NoSuchKey) {
         return null;
       }
       throw err;
     }
   }
-}
-
-async function _getObject(
-  client: AWS.S3,
-  params: AWS.S3.Types.GetObjectRequest
-): Promise<AWS.S3.GetObjectOutput> {
-  return new Promise((resolve, reject) => {
-    client.getObject(params, (err, data) => {
-      if (err) {
-        return reject(err);
-      }
-      resolve(data);
-    });
-  });
 }
