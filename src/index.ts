@@ -1,19 +1,20 @@
 import OSSClient from './oss';
 import AWSClient, { IAWSOptions } from './aws';
 import { AbstractClient } from './client';
+import { ICommonClientOptions } from './types';
 
-export interface IClientOptions extends IAWSOptions {
-  storageType: 'oss' | 'aws';
-}
+export type IClientOptions =
+  | ({ storageType: 'aws' } & IAWSOptions)
+  | ({ storageType: 'oss' } & ICommonClientOptions);
 
 export function build(options: IClientOptions): AbstractClient {
-  const { storageType, ...commonOptions } = options;
+  const { storageType, ...extraOpts } = options;
 
   switch (storageType) {
     case 'oss':
-      return new OSSClient(commonOptions);
+      return new OSSClient(extraOpts);
     case 'aws':
-      return new AWSClient(commonOptions);
+      return new AWSClient(extraOpts);
     default:
       throw Error('invalid options!');
   }

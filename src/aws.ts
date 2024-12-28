@@ -26,7 +26,12 @@ const STANDARD_HEADERS_KEYMAP = {
   LastModified: 'last-modified',
 };
 
-export interface IAWSOptions extends ICommonClientOptions {
+export interface IAWSOptions
+  extends ICommonClientOptions,
+    Omit<
+      AWS.S3.Types.ClientConfiguration,
+      'region' | 'endpoint' | 'accessKeyId' | 'accessKeySecret'
+    > {
   s3ForcePathStyle?: boolean;
   region?: string;
   signatureVersion?: string;
@@ -41,6 +46,7 @@ export default class AWSClient extends AbstractClient {
     super(options);
 
     const awsClientOptions: AWS.S3.Types.ClientConfiguration = {
+      ...options,
       accessKeyId: options.accessKeyID,
       secretAccessKey: options.accessKeySecret,
       signatureVersion: options.signatureVersion || DefaultSignatureVersion,
