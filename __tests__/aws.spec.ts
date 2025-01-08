@@ -15,7 +15,7 @@ const client = new AWS({
   s3ForcePathStyle: true,
   prefix,
   compressLimit: 0,
-  compressType: 'gzip'
+  compressType: 'gzip',
 });
 const key = 'test-awos';
 const subDir = 'multi';

@@ -3,7 +3,7 @@ import AWSClient, { IAWSOptions } from './aws';
 import { AbstractClient } from './client';
 
 export interface IClientOptions extends IAWSOptions {
-  storageType: 'oss' | 'aws';
+  storageType: 'oss' | 'aws' | 's3';
 }
 
 export function build(options: IClientOptions): AbstractClient {
@@ -12,6 +12,7 @@ export function build(options: IClientOptions): AbstractClient {
   switch (storageType) {
     case 'oss':
       return new OSSClient(commonOptions);
+    case 's3':
     case 'aws':
       return new AWSClient(commonOptions);
     default:

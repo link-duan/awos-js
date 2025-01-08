@@ -14,7 +14,7 @@ import {
   PutObjectCommand,
   PutObjectCommandInput,
   S3Client,
-  S3ClientConfig
+  S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as _ from 'lodash';
@@ -447,12 +447,7 @@ export default class AWSClient extends AbstractClient {
       Key: key,
     };
     try {
-      const data = await this.client.send(new GetObjectCommand(params));
-      const awsResult = data;
-      if (!awsResult) {
-        return null;
-      }
-
+      const awsResult = await this.client.send(new GetObjectCommand(params));
       const meta = new Map<string, string>();
       metaKeys.forEach((k: string) => {
         if (awsResult.Metadata && awsResult.Metadata[k]) {
@@ -472,7 +467,7 @@ export default class AWSClient extends AbstractClient {
         meta,
         headers,
       };
-      if (data.ContentEncoding?.startsWith('gzip')) {
+      if (awsResult.ContentEncoding?.startsWith('gzip')) {
         result.content = await this.decompress(body);
       }
       return result;
