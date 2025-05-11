@@ -23,6 +23,17 @@ const keys = _.times(10, (i: number) => `${subDir}/${i}/${i}`);
 const content = 'hello, awos-js';
 const contentType = 'image/jpeg';
 
+describe('not found handle', () => {
+  it('should head() not found', async () => {
+    const res = await client.head('not-found-key');
+    expect(res).toEqual(null);
+  });
+  it('should get() not found', async () => {
+    const res = await client.get('not-found-key');
+    expect(res).toEqual(null);
+  });
+});
+
 it('should put() works fine', async () => {
   const meta = new Map<string, any>();
   meta.set('length', content.length);
