@@ -263,7 +263,11 @@ export default class AWSClient extends AbstractClient {
       }
       return meta;
     } catch (e) {
-      if (e instanceof NoSuchKey) {
+      if (
+        e.name === 'NotFound' ||
+        e.name === 'NoSuchKey' ||
+        e.name instanceof NoSuchKey
+      ) {
         return null;
       }
       throw e;
@@ -472,7 +476,11 @@ export default class AWSClient extends AbstractClient {
       }
       return result;
     } catch (err) {
-      if (err instanceof NoSuchKey) {
+      if (
+        err.name === 'NotFound' ||
+        err.name === 'NoSuchKey' ||
+        err.name instanceof NoSuchKey
+      ) {
         return null;
       }
       throw err;
