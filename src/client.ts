@@ -69,13 +69,13 @@ export abstract class AbstractClient {
   }
 
   public copy(
-    source: string,
     key: string,
+    source: string,
     options?: ICopyObjectOptions
   ): Promise<void> {
     return this._copy(
-      this.getActualKey(source),
       this.getActualKey(key),
+      this.getActualKey(source),
       options
     );
   }
@@ -226,8 +226,8 @@ export abstract class AbstractClient {
   ): Promise<void>;
 
   protected abstract _copy(
-    source: string,
     key: string,
+    source: string,
     options?: ICopyObjectOptions
   ): Promise<void>;
 
