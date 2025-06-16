@@ -14,8 +14,6 @@ const client = new AWS({
   region: process.env.REGION!,
   s3ForcePathStyle: true,
   prefix,
-  compressLimit: 0,
-  compressType: 'gzip',
 });
 const key = 'test-awos';
 const subDir = 'multi';
@@ -34,14 +32,21 @@ describe('not found handle', () => {
   });
 });
 
-it('should put() works fine', async () => {
+test('should put() works fine', async () => {
   const meta = new Map<string, any>();
   meta.set('length', content.length);
 
   await client.put(key, content, {
     meta,
     contentType: contentType,
+    headers: {
+      contentEncoding: 'debug',
+    },
   });
+
+  const gotMeta = await client.head(key, { withStandardHeaders: true })!;
+  console.log('gotMeta', gotMeta);
+  expect(gotMeta?.get('content-encoding')).toEqual('debug');
 });
 
 it('should put() works fine', async () => {
@@ -116,6 +121,7 @@ it('should get() works fine', async () => {
 
 it('should head() works fine', async () => {
   const res = await client.head(key);
+  console.log(res);
   expect(res!.get('length')).toEqual(String(content.length));
 });
 
@@ -269,7 +275,7 @@ it('aws gzip', async () => {
   console.log(result?.headers);
 });
 
-afterAll(async () => {
-  await client.del(key);
-  await client.delMulti(keys);
-});
+// afterAll(async () => {
+//   await client.del(key);
+//   await client.delMulti(keys);
+// });
