@@ -24,6 +24,7 @@ const STANDARD_HEADERS_KEYMAP = {
   AcceptRanges: 'accept-ranges',
   ETag: 'etag',
   LastModified: 'last-modified',
+  ContentEncoding: 'content-encoding',
 };
 
 export interface IAWSOptions {
