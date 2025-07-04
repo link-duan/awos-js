@@ -28,15 +28,15 @@
       "js"
     ],
     "transform": {
-      ".(ts)": [
-        "ts-jest",
-        {
-          "diagnostics": false
-        }
-      ]
+      ".(ts)": "ts-jest"
     },
     "testRegex": "__tests__/.*\\.spec\\.ts$",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "globals": {
+      "ts-jest": {
+        "diagnostics": false
+      }
+    }
   },
   "repository": {
     "type": "git",
@@ -50,11 +50,10 @@
   "author": "nEoYe",
   "license": "ISC",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.717.0",
-    "@aws-sdk/s3-request-presigner": "^3.717.0",
     "ali-oss": "^6.1.0",
     "assert": "^1.4.1",
     "async-retry": "^1.2.3",
+    "aws-sdk": "^2.919.0",
     "lodash": "^4.17.11",
     "remove": "^0.1.5"
   },

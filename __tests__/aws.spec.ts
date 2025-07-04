@@ -11,7 +11,6 @@ const client = new AWS({
   accessKeySecret: process.env.AWS_SECRET!,
   bucket: process.env.AWS_BUCKET!,
   endpoint: process.env.ENDPOINT!,
-  region: process.env.REGION!,
   s3ForcePathStyle: true,
   prefix,
 });
@@ -36,6 +35,7 @@ test('should put() works fine', async () => {
   const meta = new Map<string, any>();
   meta.set('length', content.length);
 
+  const key = 'test-put-encoding';
   await client.put(key, content, {
     meta,
     contentType: contentType,
