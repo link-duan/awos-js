@@ -333,7 +333,7 @@ export default class AWSClient extends AbstractClient {
     options?: IListObjectV2Options
   ): Promise<string[]> {
     const bucket = this.getBucketName(key);
-    const paramsList: any = {
+    const paramsList: AWS.S3.Types.ListObjectsV2Request = {
       Bucket: bucket,
     };
 
@@ -349,16 +349,18 @@ export default class AWSClient extends AbstractClient {
       }
     }
 
-    const result: any[] = await new Promise<any>((resolve, reject) => {
-      this.client.listObjects(paramsList, (err, data) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(data.Contents);
-      });
-    });
+    const result: AWS.S3.ObjectList | undefined = await new Promise(
+      (resolve, reject) => {
+        this.client.listObjectsV2(paramsList, (err, data) => {
+          if (err) {
+            return reject(err);
+          }
+          return resolve(data.Contents);
+        });
+      }
+    );
 
-    return result.map((o) => o.Key);
+    return (result || []).map((o) => o.Key!);
   }
 
   protected async _listDetails(
@@ -503,7 +505,7 @@ export default class AWSClient extends AbstractClient {
     headers: any;
   } | null> {
     const bucket = this.getBucketName(key);
-    const params = {
+    const params: AWS.S3.Types.GetObjectRequest = {
       Bucket: bucket,
       Key: key,
     };
